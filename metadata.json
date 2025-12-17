@@ -1,0 +1,5 @@
+{
+  "name": "BioEvolve.io",
+  "description": "Um jogo estilo Agar.io onde você começa como uma partícula atômica, coleta proteínas para evoluir para uma molécula e, finalmente, decide seu destino biológico como Vírus ou Bactéria.",
+  "requestFramePermissions": []
+}
