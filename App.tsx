@@ -154,6 +154,8 @@ const App: React.FC = () => {
     setTick(t => t + 1);
   };
 
+  
+
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-slate-900">
       
