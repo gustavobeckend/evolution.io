@@ -1,5 +1,6 @@
 
 import React, { useEffect, useRef } from 'react';
+import { onPlayerUpdate, onPlayerJoined, onPlayerLeft } from '../services/socket';
 import { Player, Food, GamePhase, EvolutionStage, Bot, Projectile, Resin, Minion, MimicPassive, BotStatus, Carbohydrate } from '../types';
 import { 
     MAP_SIZE, GATE_SIZE, COLORS, getRadiusForLevel, getSpeedForSize, generateFood, 
@@ -32,6 +33,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ phase, setPhase, playerR
   const resinRef = useRef<Resin[]>([]); 
   const mouseRef = useRef({ x: 0, y: 0 });
   const spacePressedRef = useRef(false);
+    // Remote players map for multiplayer prototype
+    interface RemotePlayer {
+        id: string;
+        x: number;
+        y: number;
+        prevX: number;
+        prevY: number;
+        targetX: number;
+        targetY: number;
+        radius: number;
+        color: string;
+        lastUpdate: number;
+    }
+    const remotePlayersRef = useRef<Record<string, RemotePlayer>>({});
 
   // Initialize foods and bots
   useEffect(() => {
@@ -45,6 +60,71 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ phase, setPhase, playerR
         carbohydratesRef.current = generateCarbs(CARB_COUNT, MAP_SIZE);
     }
   }, []);
+
+    // Socket listeners for remote players (join/leave/update)
+    useEffect(() => {
+        const handleUpdate = (data: any) => {
+            const now = Date.now();
+            const id = data.playerId;
+            if (!id) return;
+            const existing = remotePlayersRef.current[id];
+            const radius = 18;
+            if (existing) {
+                existing.prevX = existing.x;
+                existing.prevY = existing.y;
+                existing.targetX = data.x;
+                existing.targetY = data.y;
+                existing.lastUpdate = now;
+                existing.x = existing.x; // keep current for interpolation
+                existing.y = existing.y;
+            } else {
+                remotePlayersRef.current[id] = {
+                    id,
+                    x: data.x || 0,
+                    y: data.y || 0,
+                    prevX: data.x || 0,
+                    prevY: data.y || 0,
+                    targetX: data.x || 0,
+                    targetY: data.y || 0,
+                    radius,
+                    color: '#60a5fa',
+                    lastUpdate: now
+                };
+            }
+        };
+
+        const handleJoin = (data: any) => {
+            if (!data?.playerId) return;
+            const id = data.playerId;
+            if (!remotePlayersRef.current[id]) {
+                remotePlayersRef.current[id] = {
+                    id,
+                    x: 0,
+                    y: 0,
+                    prevX: 0,
+                    prevY: 0,
+                    targetX: 0,
+                    targetY: 0,
+                    radius: 18,
+                    color: '#60a5fa',
+                    lastUpdate: Date.now()
+                };
+            }
+        };
+
+        const handleLeave = (data: any) => {
+            if (!data?.playerId) return;
+            delete remotePlayersRef.current[data.playerId];
+        };
+
+        onPlayerUpdate(handleUpdate);
+        onPlayerJoined(handleJoin);
+        onPlayerLeft(handleLeave);
+
+        return () => {
+            // no-op: services/socket does not expose off() so we rely on page reload to clear
+        };
+    }, []);
 
   const populateBots = (count: number) => {
       for(let i=0; i<count; i++) {
@@ -1264,6 +1344,32 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ phase, setPhase, playerR
             x: b.x, y: b.y, radius: b.radius, color: b.color, stage: b.stage, angle: b.angle, level: b.level,
             minions: [], isShielding: false, botStatus: b.status, name: b.name
         });
+    });
+
+    // Remote players (from socket) - render with interpolation
+    const interpWindow = 200; // ms
+    Object.values(remotePlayersRef.current).forEach((rp) => {
+        const dt = Math.max(0, now - rp.lastUpdate);
+        const t = Math.min(dt / interpWindow, 1);
+        const drawX = rp.prevX + (rp.targetX - rp.prevX) * t;
+        const drawY = rp.prevY + (rp.targetY - rp.prevY) * t;
+
+        // simple visibility cull similar to bots
+        const margin = rp.radius + 100;
+        if (drawX + rp.radius < player.x - (canvas.width/zoom/2) - margin ||
+            drawX - rp.radius > player.x + (canvas.width/zoom/2) + margin ||
+            drawY + rp.radius < player.y - (canvas.height/zoom/2) - margin ||
+            drawY - rp.radius > player.y + (canvas.height/zoom/2) + margin) return;
+
+        // draw a circle and name
+        ctx.beginPath();
+        ctx.arc(drawX, drawY, rp.radius, 0, Math.PI * 2);
+        ctx.fillStyle = rp.color;
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = '12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(rp.id, drawX, drawY - rp.radius - 6);
     });
 
     // Player Rendering

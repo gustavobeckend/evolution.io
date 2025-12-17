@@ -1,11 +1,12 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { GameCanvas } from './components/GameCanvas';
 import { MainMenu } from './components/MainMenu';
 import { GameHUD } from './components/GameHUD';
 import { EvolutionChoice } from './components/EvolutionChoice';
 import { GamePhase, Player, EvolutionStage, MimicPassive, Bot, Food, Carbohydrate } from './types';
 import { MAP_SIZE, COLORS, getRadiusForLevel, getSpeedForSize, BASE_XP_REQ } from './constants';
+import { connectSocket, joinRoom, sendPlayerUpdate, onPlayerUpdate, onPlayerJoined, onPlayerLeft } from './services/socket';
 
 const App: React.FC = () => {
   const [phase, setPhase] = useState<GamePhase>(GamePhase.MENU);
@@ -76,6 +77,35 @@ const App: React.FC = () => {
     foodsRef.current = [];
     carbohydratesRef.current = [];
     setPhase(GamePhase.PLAYING);
+    // Connect to socket server and join a room
+    try {
+      connectSocket();
+      // get room from querystring ?room=xyz or ask
+      const params = new URLSearchParams(window.location.search);
+      let room = params.get('room');
+      if (!room) {
+        room = prompt('Enter room code to join (same as your friend):', 'default') || 'default';
+      }
+      joinRoom(room, nickname);
+      // send periodic updates
+      const interval = window.setInterval(() => {
+        const p = playerRef.current;
+        sendPlayerUpdate({ room, playerId: p.name, x: p.x, y: p.y, angle: p.angle, level: p.level });
+      }, 150);
+      // cleanup on unload
+      window.addEventListener('beforeunload', () => {
+        clearInterval(interval);
+      });
+      onPlayerUpdate((data) => {
+        // For prototype: log other players' positions
+        // You can extend to show them in-game (e.g., add to botsRef)
+        // console.log('remote update', data);
+      });
+      onPlayerJoined((d) => console.log('player joined', d));
+      onPlayerLeft((d) => console.log('player left', d));
+    } catch (e) {
+      console.warn('Socket connect failed', e);
+    }
   };
 
   const handleEvolutionChoice = (choice: EvolutionStage) => {
