@@ -5,7 +5,9 @@ let socket: Socket | null = null;
 export function connectSocket(url = ''): void {
   if (socket) return;
   const endpoint = url || (window as any).__SOCKET_URL__ || (window as any).__VITE_SOCKET_URL__ || 'http://localhost:4000';
-  socket = io(endpoint, { transports: ['websocket', 'polling'] });
+  // Some hosting providers (proxies/load-balancers) block websocket upgrades.
+  // Use polling as a more compatible fallback for now.
+  socket = io(endpoint, { transports: ['polling'] });
 
   socket.on('connect', () => {
     console.log('connected to socket', socket?.id);

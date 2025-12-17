@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { GameCanvas } from './components/GameCanvas';
 import { MainMenu } from './components/MainMenu';
@@ -193,3 +192,4 @@ const App: React.FC = () => {
 };
 
 export default App;
+
